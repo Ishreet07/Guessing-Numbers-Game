@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guess the Number + Boss Fight + Leaderboard</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+    color: #333;
+    margin: 0; padding: 40px 20px;
+    text-align: center;
+  }
+  input, button, select {
+    padding: 12px 18px;
+    margin: 10px 5px;
+    font-size: 1rem;
+    border-radius: 10px;
+    border: none;
+    outline: none;
+    cursor: pointer;
+  }
+  button:hover {
+    filter: brightness(85%);
+  }
+  #playAgainBtn, #playAgainBtnBoss, #clearLeaderboardBtn {
+    display: none;
+    background-color: #007bff;
+    color: white;
+  }
+  #playAgainBtn:hover, #playAgainBtnBoss:hover, #clearLeaderboardBtn:hover {
+    background-color: #0056b3;
+  }
+  #message, #attempts, #bossIntro, #victoryMessage {
+    margin: 15px 0;
+    font-size: 1.2rem;
+  }
+  #mainGame, #bossGame, #genderNameScreen, #leaderboard {
+    animation: fadeIn 1s ease;
+  }
+  #mainGame, #bossGame, #leaderboard {
+    display: none;
+  }
+  #leaderboard table {
+    margin: 0 auto;
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 400px;
+  }
+  #leaderboard th, #leaderboard td {
+    border: 1px solid #ccc;
+    padding: 8px 12px;
+  }
+  #leaderboard th {
+    background-color: #f0a500;
+    color: white;
+  }
+  @keyframes fadeIn {
+    from {opacity: 0;}
+    to {opacity: 1;}
+  }
+</style>
+</head>
+<body>
+
+<!-- Name + Gender Input Screen -->
+<div id="genderNameScreen">
+  <h1>Welcome, Brave Warrior!</h1>
+  <p>Enter your name:</p>
+  <input type="text" id="playerNameInput" placeholder="Your name" maxlength="20" />
+  <p>Select your gender:</p>
+  <button onclick="selectGenderName('he')">Male</button>
+  <button onclick="selectGenderName('she')">Female</button>
+  <p style="font-size: 0.85rem; color: #555;">(Please enter your name before selecting gender)</p>
+</div>
+
+<!-- Main Game -->
+<div id="mainGame">
+  <h1>🎯 Guess the Number</h1>
+
+  <label for="difficulty">Difficulty:</label>
+  <select id="difficulty">
+    <option value="10">Easy (1–10)</option>
+    <option value="50">Medium (1–50)</option>
+    <option value="100">Hard (1–100)</option>
+  </select>
+
+  <p>Guess the number I'm thinking of!</p>
+
+  <input type="number" id="guessInput" placeholder="Your guess" />
+  <button onclick="checkGuess()">Guess</button>
+  <button id="playAgainBtn" onclick="resetGame()">Play Again</button>
+
+  <p id="message"></p>
+  <p id="attempts"></p>
+</div>
+
+<!-- Boss Fight Game -->
+<div id="bossGame">
+  <h1>⚔️ Boss Fight!</h1>
+  <p id="bossIntro"></p>
+
+  <div id="characters" style="font-size: 5rem; margin: 10px 0;">
+    <span id="playerChar" title="You"></span>
+    <span id="bossChar" title="Boss">👹</span>
+  </div>
+
+  <div>
+    <label>You HP</label>
+    <div id="playerHPBar" style="width: 300px; height: 25px; background: #ddd; border-radius: 12px; margin: auto; overflow: hidden;">
+      <div id="playerHP" style="height: 100%; background: #28a745; width: 100%; transition: width 0.3s;"></div>
+    </div>
+  </div>
+
+  <div>
+    <label>Boss HP</label>
+    <div id="bossHPBar" style="width: 300px; height: 25px; background: #ddd; border-radius: 12px; margin: auto; overflow: hidden;">
+      <div id="bossHP" style="height: 100%; background: red; width: 100%; transition: width 0.3s;"></div>
+    </div>
+  </div>
+
+  <button id="attackBtn" onclick="playerAttack()">Swing Sword 🗡️</button>
+  <p id="victoryMessage"></p>
+  <button id="playAgainBtnBoss" onclick="resetGame()">Play Again</button>
+</div>
+
+<!-- Leaderboard -->
+<div id="leaderboard">
+  <h2>🏆 Leaderboard</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Rank</th><th>Name</th><th>Gender</th><th>Score</th><th>Outcome</th>
+      </tr>
+    </thead>
+    <tbody id="leaderboardBody"></tbody>
+  </table>
+  <button id="clearLeaderboardBtn" onclick="clearLeaderboard()">Clear Leaderboard</button>
+</div>
+
+<script>
+  // Globals
+  let playerName = "";
+  let playerGender = null; // 'he' or 'she'
+  let pronounObj = {};
+  let numberToGuess;
+  let attempts = 0;
+  let maxAttempts = 5;
+  let maxNumber = 10;
+  let gameOver = false;
+
+  // Boss fight stats
+  let bossHP = 100;
+  let playerHP = 100;
+  let isPlayerTurn = true;
+
+  // Elements shortcuts
+  const playAgainBtn = document.getElementById('playAgainBtn');
+  const playAgainBtnBoss = document.getElementById('playAgainBtnBoss');
+  const leaderboardDiv = document.getElementById('leaderboard');
+  const leaderboardBody = document.getElementById('leaderboardBody');
+  const clearLeaderboardBtn = document.getElementById('clearLeaderboardBtn');
+
+  // Pronouns setup
+  function setPronouns(gender) {
+    if (gender === 'he') {
+      pronounObj = {
+        subject: "He",
+        object: "him",
+        possessive: "his",
+        descriptor: "brave male warrior",
+        char: "🧔"
+      };
+    } else {
+      pronounObj = {
+        subject: "She",
+        object: "her",
+        possessive: "her",
+        descriptor: "brave female warrior",
+        char: "👩"
+      };
+    }
+  }
+
+  // Step 1: Name + Gender selection handler
+  function selectGenderName(gender) {
+    const nameInput = document.getElementById('playerNameInput');
+    const name = nameInput.value.trim();
+    if (name === "") {
+      alert("Please enter your name before selecting gender.");
+      return;
+    }
+    playerName = name;
+    playerGender = gender;
+    setPronouns(gender);
+    // Hide start screen, show main game
+    document.getElementById('genderNameScreen').style.display = 'none';
+    document.getElementById('mainGame').style.display = 'block';
+    document.getElementById('playerChar').textContent = pronounObj.char;
+    startGame();
+    updateLeaderboard();
+  }
+
+  // Game start setup
+  function startGame() {
+    maxNumber = parseInt(document.getElementById("difficulty").value);
+    numberToGuess = Math.floor(Math.random() * maxNumber) + 1;
+    attempts = 0;
+    gameOver = false;
+    bossHP = 100;
+    playerHP = 100;
+    isPlayerTurn = true;
+
+    document.getElementById("message").textContent = "";
+    document.getElementById("attempts").textContent = "";
+    document.getElementById("guessInput").value = "";
+    playAgainBtn.style.display = "none";
+    playAgainBtnBoss.style.display = "none";
+    document.getElementById("mainGame").style.display = "block";
+    document.getElementById("bossGame").style.display = "none";
+    document.getElementById("victoryMessage").textContent = "";
+    leaderboardDiv.style.display = "block";
+    updateHPBars();
+  }
+
+  function checkGuess() {
+    if (gameOver) return;
+
+    const guess = parseInt(document.getElementById("guessInput").value);
+    if (isNaN(guess) || guess < 1 || guess > maxNumber) {
+      document.getElementById("message").textContent = `⛔ Enter a number between 1 and ${maxNumber}`;
+      return;
+    }
+
+    attempts++;
+
+    if (guess === numberToGuess) {
+      document.getElementById("message").textContent = `🎉 You got it in ${attempts} tries!`;
+      endGame(true);
+    } else if (attempts >= maxAttempts) {
+      document.getElementById("message").textContent = `❌ Out of tries! The number was ${numberToGuess}. Prepare to fight!`;
+      setTimeout(startBossFight, 1500);
+    } else {
+      const hint = guess < numberToGuess ? "📉 Too low!" : "📈 Too high!";
+      document.getElementById("message").textContent = hint;
+    }
+
+    document.getElementById("attempts").textContent = `Attempts: ${attempts} / ${maxAttempts}`;
+  }
+
+  // End game with outcome: true=guess win, false=boss fight win or lose
+  function endGame(guessWin, bossWin = null) {
+    gameOver = true;
+    if (guessWin) {
+      playAgainBtn.style.display = "inline-block";
+      saveScore({ name: playerName, gender: playerGender, score: attempts, outcome: "Guessed" });
+    } else {
+      // boss fight ended, bossWin = true or false
+      playAgainBtnBoss.style.display = "inline-block";
+      saveScore({ name: playerName, gender: playerGender, score: attempts + (bossWin ? 0 : 50), outcome: bossWin ? "Boss Defeated" : "Defeated" });
+    }
+    updateLeaderboard();
+  }
+
+  function resetGame() {
+    startGame();
+  }
+
+  // Boss fight functions
+  function startBossFight() {
+    document.getElementById("mainGame").style.display = "none";
+    document.getElementById("bossGame").style.display = "block";
+
+    document.getElementById('bossIntro').textContent =
+      `You, the ${pronounObj.descriptor}, have angered the gods of this game. You must fight them!`;
+
+    updateHPBars();
+    isPlayerTurn = true;
+    enableAttackButton(true);
+    document.getElementById("victoryMessage").textContent = "";
+    playAgainBtnBoss.style.display = "none";
+  }
+
+  function updateHPBars() {
+    document.getElementById("bossHP").style.width = bossHP + "%";
+    document.getElementById("playerHP").style.width = playerHP + "%";
+  }
+
+  function enableAttackButton(enabled) {
+    document.getElementById('attackBtn').disabled = !enabled;
+  }
+
+  function playerAttack() {
+    if (!isPlayerTurn || bossHP <= 0 || playerHP <= 0) return;
+
+    let hit = Math.floor(Math.random() * 20) + 5;
+    bossHP -= hit;
+    if (bossHP < 0) bossHP = 0;
+    updateHPBars();
+
+    addMessage(`You hit the boss for ${hit} damage!`);
+
+    if (bossHP === 0) {
+      endBossFight(true);
+      return;
+    }
+
+    isPlayerTurn = false;
+    enableAttackButton(false);
+    setTimeout(bossAttack, 1500);
+  }
+
+  function bossAttack() {
+    if (playerHP <= 0 || bossHP <= 0) return;
+
+    let hit = Math.floor(Math.random() * 15) + 5;
+    playerHP -= hit;
+    if (playerHP < 0) playerHP = 0;
+    updateHPBars();
+
+    addMessage(`The boss hits you for ${hit} damage!`);
+
+    if (playerHP === 0) {
+      endBossFight(false);
+      return;
+    }
+
+    isPlayerTurn = true;
+    enableAttackButton(true);
+  }
+
+  function endBossFight(playerWon) {
+    if (playerWon) {
+      addMessage("🎉 You defeated the boss!");
+    } else {
+      addMessage("💀 You were defeated by the boss...");
+    }
+    enableAttackButton(false);
+    endGame(false, playerWon);
+  }
+
+  // Messages for boss fight
+  function addMessage(text) {
+    document.getElementById("victoryMessage").textContent = text;
+  }
+
+  // Leaderboard localStorage keys
+  const LEADERBOARD_KEY = "myGameLeaderboard";
+
+  // Save a score to localStorage leaderboard
+  function saveScore(entry) {
+    let leaderboard = JSON.parse(localStorage.getItem(LEADERBOARD_KEY)) || [];
+    leaderboard.push(entry);
+    // Sort by score ascending (lower score better)
+    leaderboard.sort((a, b) => a.score - b.score);
+    // Keep only top 10
+    leaderboard = leaderboard.slice(0, 10);
+    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+  }
+
+  // Load and show leaderboard
+  function updateLeaderboard() {
+    let leaderboard = JSON.parse(localStorage.getItem(LEADERBOARD_KEY)) || [];
+    leaderboardBody.innerHTML = "";
+    leaderboard.forEach((entry, i) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${entry.name}</td>
+        <td>${entry.gender === "he" ? "Male" : "Female"}</td>
+        <td>${entry.score}</td>
+        <td>${entry.outcome}</td>
+      `;
+      leaderboardBody.appendChild(row);
+    });
+    clearLeaderboardBtn.style.display = leaderboard.length ? "inline-block" : "none";
+  }
+
+  // Clear leaderboard
+  function clearLeaderboard() {
+    if (confirm("Are you sure you want to clear the leaderboard?")) {
+      localStorage.removeItem(LEADERBOARD_KEY);
+      updateLeaderboard();
+    }
+  }
+
+</script>
+
+</body>
+</html>
